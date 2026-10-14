@@ -1,0 +1,671 @@
+// Tellme Bro — Prisma Schema
+// Phase 1: Foundation (Users, Auth, RBAC, Audit)
+// Full schema — all entities for all phases
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ──────────────────────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  EDITOR
+  USER
+}
+
+enum OAuthProvider {
+  GOOGLE
+  FACEBOOK
+}
+
+enum VerificationType {
+  VERIFY_EMAIL
+  RESET_PASSWORD
+}
+
+enum PostStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum Platform {
+  INSTAGRAM
+  FACEBOOK
+  YOUTUBE
+  LINKEDIN
+}
+
+enum ContentType {
+  POST
+  REEL
+  VIDEO
+  SHORT
+  ARTICLE
+}
+
+enum Priority {
+  STANDARD
+  PRIORITY
+  ON_DEMAND
+}
+
+enum LocationSource {
+  BROWSER
+  IP
+  MANUAL
+}
+
+enum InteractionType {
+  VIEW
+  CLICK
+  SEARCH
+  SAVE
+  LIKE
+  SHARE
+  CATEGORY_FOLLOW
+}
+
+enum ReportReason {
+  MISLEADING
+  INAPPROPRIATE
+  COPYRIGHT
+  SPAM
+  OFFENSIVE
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  RESOLVED
+  DISMISSED
+}
+
+enum ApprovalAction {
+  APPROVED
+  REJECTED
+}
+
+enum AdPlacement {
+  TOP_BANNER
+  IN_FEED
+  SIDEBAR
+  CATEGORY_PAGE
+  HOME_PAGE
+}
+
+enum AdStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  EXPIRED
+  ARCHIVED
+}
+
+enum DeviceTarget {
+  ALL
+  MOBILE
+  DESKTOP
+}
+
+enum AdCreativeType {
+  IMAGE
+  VIDEO
+}
+
+enum PublishingJobStatus {
+  PENDING
+  PROCESSING
+  PUBLISHED
+  FAILED
+  CANCELLED
+}
+
+// ─── USERS & AUTH ───────────────────────────────────────
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  emailVerified Boolean   @default(false) @map("email_verified")
+  passwordHash  String?   @map("password_hash")
+  name          String
+  nickname      String?   @unique
+  avatarUrl     String?   @map("avatar_url")
+  role          Role      @default(USER)
+  isActive      Boolean   @default(true) @map("is_active")
+  totpSecret    String?   @map("totp_secret")
+  totpEnabled   Boolean   @default(false) @map("totp_enabled")
+  failedLogins  Int       @default(0) @map("failed_logins")
+  lockedUntil   DateTime? @map("locked_until")
+  lastLoginAt   DateTime? @map("last_login_at")
+  lastLoginIp   String?   @map("last_login_ip")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  oauthIdentities    OAuthIdentity[]
+  refreshTokens      RefreshToken[]
+  emailVerifications EmailVerification[]
+  preferences        UserPreference?
+  locations          UserLocation[]
+  preferredCategories UserPreferredCategory[]
+  posts              Post[]
+  likes              Like[]
+  favorites          Favorite[]
+  interactions       Interaction[]
+  reports            Report[]           @relation("reporter")
+  reviewedReports    Report[]           @relation("reviewer")
+  approvals          ContentApproval[]
+  ads                Ad[]
+  notifications      Notification[]
+  auditLogs          AuditLog[]
+  socialConnections  SocialConnection[]
+  systemSettingUpdates SystemSetting[]
+
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model OAuthIdentity {
+  id            String        @id @default(uuid())
+  userId        String        @map("user_id")
+  provider      OAuthProvider
+  providerId    String        @map("provider_id")
+  providerEmail String?       @map("provider_email")
+  accessToken   String?       @map("access_token")
+  refreshToken  String?       @map("refresh_token")
+  tokenExpires  DateTime?     @map("token_expires")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerId])
+  @@index([userId])
+  @@map("oauth_identities")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  tokenHash String   @unique @map("token_hash")
+  family    String
+  expiresAt DateTime @map("expires_at")
+  revoked   Boolean  @default(false)
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([family])
+  @@map("refresh_tokens")
+}
+
+model EmailVerification {
+  id        String           @id @default(uuid())
+  userId    String           @map("user_id")
+  code      String
+  type      VerificationType
+  expiresAt DateTime         @map("expires_at")
+  used      Boolean          @default(false)
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("email_verifications")
+}
+
+// ─── USER PREFERENCES & LOCATION ───────────────────────
+
+model UserPreference {
+  id              String   @id @default(uuid())
+  userId          String   @unique @map("user_id")
+  darkMode        Boolean  @default(false) @map("dark_mode")
+  language        String   @default("en")
+  personalization Boolean  @default(true)
+  emailNotifs     Boolean  @default(true) @map("email_notifs")
+  pushNotifs      Boolean  @default(false) @map("push_notifs")
+  onboarded       Boolean  @default(false)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+model UserPreferredCategory {
+  userId     String @map("user_id")
+  categoryId String @map("category_id")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([userId, categoryId])
+  @@map("user_preferred_categories")
+}
+
+model UserLocation {
+  id         String         @id @default(uuid())
+  userId     String         @map("user_id")
+  label      String?
+  latitude   Decimal?       @db.Decimal(10, 7)
+  longitude  Decimal?       @db.Decimal(10, 7)
+  locality   String?
+  city       String?
+  district   String?
+  state      String?
+  country    String?        @default("India")
+  postalCode String?        @map("postal_code")
+  isPrimary  Boolean        @default(false) @map("is_primary")
+  source     LocationSource
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([city])
+  @@map("user_locations")
+}
+
+// ─── CATEGORIES & TAGS ─────────────────────────────────
+
+model Category {
+  id           String   @id @default(uuid())
+  name         String
+  slug         String   @unique
+  description  String?
+  iconUrl      String?  @map("icon_url")
+  parentId     String?  @map("parent_id")
+  displayOrder Int      @default(0) @map("display_order")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  parent   Category?  @relation("CategoryParent", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[] @relation("CategoryParent")
+
+  postCategories    PostCategory[]
+  adTargetCategories AdTargetCategory[]
+  userPreferred     UserPreferredCategory[]
+  interactions      Interaction[]
+
+  @@index([parentId])
+  @@index([slug])
+  @@map("categories")
+}
+
+model Tag {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  postTags PostTag[]
+
+  @@map("tags")
+}
+
+// ─── POSTS / SOCIAL CONTENT ────────────────────────────
+
+model Post {
+  id            String      @id @default(uuid())
+  title         String
+  description   String?
+  platform      Platform
+  contentType   ContentType @map("content_type")
+  originalUrl   String      @map("original_url")
+  embedUrl      String?     @map("embed_url")
+  thumbnailUrl  String?     @map("thumbnail_url")
+  language      String      @default("en")
+  status        PostStatus  @default(DRAFT)
+  priority      Priority    @default(STANDARD)
+  priorityStart DateTime?   @map("priority_start")
+  priorityEnd   DateTime?   @map("priority_end")
+  publishAt     DateTime?   @map("publish_at")
+  expiresAt     DateTime?   @map("expires_at")
+  sourceAttr    String?     @map("source_attr")
+  copyrightInfo String?     @map("copyright_info")
+  createdById   String      @map("created_by")
+  isActive      Boolean     @default(true) @map("is_active")
+  viewCount     Int         @default(0) @map("view_count")
+  likeCount     Int         @default(0) @map("like_count")
+  saveCount     Int         @default(0) @map("save_count")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  deletedAt     DateTime?   @map("deleted_at")
+
+  createdBy      User              @relation(fields: [createdById], references: [id])
+  categories     PostCategory[]
+  tags           PostTag[]
+  locations      PostLocation[]
+  approvals      ContentApproval[]
+  likes          Like[]
+  favorites      Favorite[]
+  interactions   Interaction[]
+  reports        Report[]
+  publishingJobs PublishingJob[]
+
+  @@index([status])
+  @@index([platform])
+  @@index([priority])
+  @@index([createdById])
+  @@index([publishAt])
+  @@index([createdAt(sort: Desc)])
+  @@map("posts")
+}
+
+model PostCategory {
+  postId     String @map("post_id")
+  categoryId String @map("category_id")
+
+  post     Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([postId, categoryId])
+  @@map("post_categories")
+}
+
+model PostTag {
+  postId String @map("post_id")
+  tagId  String @map("tag_id")
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+  @@map("post_tags")
+}
+
+model PostLocation {
+  id             String   @id @default(uuid())
+  postId         String   @map("post_id")
+  locality       String?
+  city           String?
+  district       String?
+  state          String?
+  country        String?  @default("India")
+  postalCode     String?  @map("postal_code")
+  latitude       Decimal? @db.Decimal(10, 7)
+  longitude      Decimal? @db.Decimal(10, 7)
+  radiusKm       Int?     @map("radius_km")
+  isAllLocations Boolean  @default(false) @map("is_all_locations")
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([city])
+  @@index([state])
+  @@map("post_locations")
+}
+
+// ─── CONTENT MODERATION ────────────────────────────────
+
+model ContentApproval {
+  id         String         @id @default(uuid())
+  postId     String         @map("post_id")
+  reviewerId String         @map("reviewer_id")
+  action     ApprovalAction
+  reason     String?
+  createdAt  DateTime       @default(now()) @map("created_at")
+
+  post     Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  reviewer User @relation(fields: [reviewerId], references: [id])
+
+  @@map("content_approvals")
+}
+
+model Report {
+  id         String       @id @default(uuid())
+  postId     String       @map("post_id")
+  reporterId String       @map("reporter_id")
+  reason     ReportReason
+  details    String?
+  status     ReportStatus @default(PENDING)
+  reviewedBy String?      @map("reviewed_by")
+  reviewedAt DateTime?    @map("reviewed_at")
+  createdAt  DateTime     @default(now()) @map("created_at")
+
+  post     Post  @relation(fields: [postId], references: [id], onDelete: Cascade)
+  reporter User  @relation("reporter", fields: [reporterId], references: [id])
+  reviewer User? @relation("reviewer", fields: [reviewedBy], references: [id])
+
+  @@map("reports")
+}
+
+// ─── USER INTERACTIONS ─────────────────────────────────
+
+model Like {
+  userId    String   @map("user_id")
+  postId    String   @map("post_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId])
+  @@map("likes")
+}
+
+model Favorite {
+  userId    String   @map("user_id")
+  postId    String   @map("post_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId])
+  @@map("favorites")
+}
+
+model Interaction {
+  id          String          @id @default(uuid())
+  userId      String          @map("user_id")
+  postId      String?         @map("post_id")
+  type        InteractionType
+  categoryId  String?         @map("category_id")
+  searchQuery String?         @map("search_query")
+  durationMs  Int?            @map("duration_ms")
+  metadata    Json?
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post     Post?     @relation(fields: [postId], references: [id], onDelete: SetNull)
+  category Category? @relation(fields: [categoryId], references: [id])
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt(sort: Desc)])
+  @@map("interactions")
+}
+
+// ─── ADVERTISING ───────────────────────────────────────
+
+model Ad {
+  id            String        @id @default(uuid())
+  campaignName  String        @map("campaign_name")
+  advertiser    String?
+  creativeUrl   String?       @map("creative_url")
+  creativeType  AdCreativeType? @map("creative_type")
+  headline      String?
+  description   String?
+  destinationUrl String       @map("destination_url")
+  placement     AdPlacement
+  deviceTarget  DeviceTarget  @default(ALL) @map("device_target")
+  priority      Int           @default(0)
+  status        AdStatus      @default(DRAFT)
+  startDate     DateTime?     @map("start_date")
+  endDate       DateTime?     @map("end_date")
+  impressionCap Int?          @map("impression_cap")
+  clickCap      Int?          @map("click_cap")
+  createdById   String        @map("created_by")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  createdBy        User               @relation(fields: [createdById], references: [id])
+  targetCategories AdTargetCategory[]
+  targetLocations  AdTargetLocation[]
+  impressions      AdImpression[]
+  clicks           AdClick[]
+
+  @@map("ads")
+}
+
+model AdTargetCategory {
+  adId       String @map("ad_id")
+  categoryId String @map("category_id")
+
+  ad       Ad       @relation(fields: [adId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([adId, categoryId])
+  @@map("ad_target_categories")
+}
+
+model AdTargetLocation {
+  id         String  @id @default(uuid())
+  adId       String  @map("ad_id")
+  city       String?
+  state      String?
+  country    String?
+  postalCode String? @map("postal_code")
+  isAll      Boolean @default(false) @map("is_all")
+
+  ad Ad @relation(fields: [adId], references: [id], onDelete: Cascade)
+
+  @@map("ad_target_locations")
+}
+
+model AdImpression {
+  id        String   @id @default(uuid())
+  adId      String   @map("ad_id")
+  userId    String?  @map("user_id")
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  page      String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  ad Ad @relation(fields: [adId], references: [id], onDelete: Cascade)
+
+  @@index([adId])
+  @@map("ad_impressions")
+}
+
+model AdClick {
+  id        String   @id @default(uuid())
+  adId      String   @map("ad_id")
+  userId    String?  @map("user_id")
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  ad Ad @relation(fields: [adId], references: [id], onDelete: Cascade)
+
+  @@map("ad_clicks")
+}
+
+// ─── SOCIAL CONNECTIONS (Phase 6) ──────────────────────
+
+model SocialConnection {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  platform     Platform
+  accountId    String    @map("account_id")
+  accountName  String?   @map("account_name")
+  accessToken  String?   @map("access_token")
+  refreshToken String?   @map("refresh_token")
+  tokenExpires DateTime? @map("token_expires")
+  permissions  String[]
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  publishingJobs PublishingJob[]
+
+  @@map("social_connections")
+}
+
+model PublishingJob {
+  id             String              @id @default(uuid())
+  postId         String              @map("post_id")
+  connectionId   String              @map("connection_id")
+  status         PublishingJobStatus @default(PENDING)
+  platformPostId String?             @map("platform_post_id")
+  platformUrl    String?             @map("platform_url")
+  errorMessage   String?             @map("error_message")
+  retryCount     Int                 @default(0) @map("retry_count")
+  scheduledAt    DateTime?           @map("scheduled_at")
+  completedAt    DateTime?           @map("completed_at")
+  createdAt      DateTime            @default(now()) @map("created_at")
+
+  post       Post             @relation(fields: [postId], references: [id])
+  connection SocialConnection @relation(fields: [connectionId], references: [id])
+
+  @@map("publishing_jobs")
+}
+
+// ─── NOTIFICATIONS & SYSTEM ────────────────────────────
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  type      String
+  title     String
+  message   String?
+  link      String?
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?  @map("actor_id")
+  action     String
+  entityType String?  @map("entity_type")
+  entityId   String?  @map("entity_id")
+  details    Json?
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  actor User? @relation(fields: [actorId], references: [id])
+
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+model SystemSetting {
+  key         String   @id
+  value       Json
+  description String?
+  updatedById String?  @map("updated_by")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  updatedBy User? @relation(fields: [updatedById], references: [id])
+
+  @@map("system_settings")
+}
