@@ -1,3 +1,7 @@
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = 'file:./dev.db';
+}
+
 const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
