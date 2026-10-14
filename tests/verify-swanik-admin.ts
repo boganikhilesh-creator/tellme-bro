@@ -36,7 +36,8 @@ async function run() {
     process.exit(1);
   }
 
-  const isValidPassword = await argon2.verify(user.passwordHash, 'Swanik@654774');
+  const { verifyPassword } = await import('@/lib/auth/password');
+  const isValidPassword = await verifyPassword('Swanik@654774', user.passwordHash);
   if (!isValidPassword) {
     console.error('❌ Password verification failed for Swanik@654774!');
     process.exit(1);

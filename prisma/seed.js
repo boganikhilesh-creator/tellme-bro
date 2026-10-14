@@ -1,7 +1,14 @@
 const { PrismaClient } = require('@prisma/client');
-const argon2 = require('argon2');
+const crypto = require('crypto');
 
 const prisma = new PrismaClient();
+
+function hashPassword(password) {
+  // Uses Node's built-in crypto.scryptSync - zero C++ binary/glibc dependencies!
+  const salt = crypto.randomBytes(16).toString('hex');
+  const derivedKey = crypto.scryptSync(password, salt, 64);
+  return `$scrypt$${salt}$${derivedKey.toString('hex')}`;
+}
 
 const DEFAULT_CATEGORIES = [
   {
@@ -59,10 +66,7 @@ async function main() {
   }
   console.log('✅ Categories seeded.');
 
-  const devPasswordHash = await argon2.hash('TellmeBro@2026!', {
-    type: argon2.argon2id,
-  });
-
+  const devPasswordHash = hashPassword('TellmeBro@2026!');
   const superAdminEmail = (process.env.SUPER_ADMIN_EMAIL || 'swanikhyd@gmail.com').toLowerCase().trim();
 
   const superAdmin = await prisma.user.upsert({
@@ -86,8 +90,8 @@ async function main() {
   });
   console.log(`✅ Super Admin ready: ${superAdmin.email}`);
 
-  // Seed Official Super Admin: swanikhyd@gmail.com / Swanik@654774
-  const adminPasswordHash = await argon2.hash('Swanik@654774', { type: argon2.argon2id });
+  // Official Super Admin: swanikhyd@gmail.com / Swanik@654774
+  const adminPasswordHash = hashPassword('Swanik@654774');
   const adminUser = await prisma.user.upsert({
     where: { email: 'swanikhyd@gmail.com' },
     update: {
