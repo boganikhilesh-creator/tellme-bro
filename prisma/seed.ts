@@ -89,10 +89,10 @@ async function main() {
   });
   console.log(`✅ Super Admin ready: ${superAdmin.email}`);
 
-  // 3b. Seed Requested Super Admin: boganikhilesh@gmail.com / Hello1029
-  const adminPasswordHash = await argon2.hash('Hello1029', { type: argon2.argon2id });
+  // 3b. Seed Official Super Admin: swanikhyd@gmail.com / Swanik@654774
+  const adminPasswordHash = await argon2.hash('Swanik@654774', { type: argon2.argon2id });
   const adminUser = await prisma.user.upsert({
-    where: { email: 'boganikhilesh@gmail.com' },
+    where: { email: 'swanikhyd@gmail.com' },
     update: {
       role: 'SUPER_ADMIN',
       passwordHash: adminPasswordHash,
@@ -103,8 +103,8 @@ async function main() {
       lockedUntil: null,
     },
     create: {
-      name: 'Nikhilesh Admin',
-      email: 'boganikhilesh@gmail.com',
+      name: 'Swanik Super Admin',
+      email: 'swanikhyd@gmail.com',
       passwordHash: adminPasswordHash,
       role: 'SUPER_ADMIN',
       emailVerified: true,
@@ -114,7 +114,7 @@ async function main() {
       },
     },
   });
-  console.log(`✅ Admin ready: ${adminUser.email} (PW: Hello1029)`);
+  console.log(`✅ Admin ready: ${adminUser.email} (PW: Swanik@654774)`);
 
   // 4. Seed Development Admin
   const devAdmin = await prisma.user.upsert({

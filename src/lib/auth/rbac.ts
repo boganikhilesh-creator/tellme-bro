@@ -8,12 +8,12 @@ export const ROLE_HIERARCHY: Record<RoleType, number> = {
 };
 
 export function getSuperAdminEmail(): string {
-  return (process.env.SUPER_ADMIN_EMAIL || 'boganikhilesh@gmail.com').toLowerCase().trim();
+  return (process.env.SUPER_ADMIN_EMAIL || 'swanikhyd@gmail.com').toLowerCase().trim();
 }
 
 export function isSuperAdminEmail(email: string): boolean {
   const normalized = email.toLowerCase().trim();
-  return normalized === getSuperAdminEmail() || normalized === 'boganikhilesh@gmail.com';
+  return normalized === getSuperAdminEmail() || normalized === 'swanikhyd@gmail.com';
 }
 
 /**
