@@ -145,6 +145,10 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    if (!user) {
+      return errorResponse('Invalid email or password', 401);
+    }
+
     // Issue tokens directly
     const accessToken = signAccessToken({
       userId: user.id,

@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
       action: 'USER_SET_NICKNAME',
       entityType: 'USER',
       entityId: session.id,
-      metadata: { nickname: cleanNickname },
+      details: JSON.stringify({ nickname: cleanNickname }),
     });
 
     return successResponse({
